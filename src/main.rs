@@ -1,40 +1,45 @@
-use image::{ImageBuffer, Rgb};
-use std::fs;
+use std::io::Write;
+use std::process::{Command, Stdio};
+use rand::prelude::*;
 
 fn main() {
-    let data = "BroadcastFS Level 1 Test: Hello Amey!".as_bytes();
-
     let width = 1280;
     let height = 720;
 
-    let mut img = ImageBuffer::new(width, height);
+    let mut child = Command::new("ffmpeg")
+        .args([
+            "-f", "rawvideo",
+            "-pixel_format", "rgb24",
+            "-video_size", &format!("{}x{}", width, height),
+            "-i", "-",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "zerolatency",
+            "-f", "mpegts",
+            "output.ts", 
+        ])
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("Failed to start ffmpeg. Is it in your PATH?");
 
-    let mut byte_idx = 0;
-    let mut bit_idx = 0;
+    let mut stdin = child.stdin.take().expect("Failed to open stdin");
 
-    println!("Encoding {} bytes into a {}x{} frame...", data.len(), width, height);
+    let mut rng = rand::rng(); 
 
-    for (_x, _y, pixel) in img.enumerate_pixels_mut() {
-        if byte_idx < data.len() {
-            // Extract the specific bit (0 or 1)
-            let bit = (data[byte_idx] >> (7 - bit_idx)) & 1;
-            
-            // Map bit to color: 1 = White (255), 0 = Black (0)
-            let color = if bit == 1 { 255 } else { 0 };
-            *pixel = Rgb([color, color, color]);
+    println!("Broadcasting... Press Ctrl+C to stop.");
 
-            bit_idx += 1;
-            if bit_idx == 8 {
-                bit_idx = 0;
-                byte_idx += 1;
-            }
-        } else {
-            // Fill the rest with random grey noise so it looks "weird"
-            let noise: u8 = rand::random();
-            *pixel = Rgb([noise, noise, noise]);
+    loop {
+        let mut frame = Vec::with_capacity(width * height * 3);
+        
+        for _ in 0..(width * height) {
+            let val: u8 = rng.random(); 
+            frame.push(val);
+            frame.push(val); 
+            frame.push(val); 
+        }
+
+        if let Err(_) = stdin.write_all(&frame) {
+            break; 
         }
     }
-
-    img.save("test_frame.png").expect("Failed to save image");
-    println!("Success! Created 'test_frame.png'.");
 }
