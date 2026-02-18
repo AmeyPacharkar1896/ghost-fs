@@ -5,6 +5,8 @@ defmodule BroadcastRelay.Router do
     parsers: [:urlencoded, :multipart]
   )
 
+  plug(Plug.Static, at: "/", from: :broadcast_relay)
+
   plug(:match)
   plug(:dispatch)
 
@@ -27,6 +29,7 @@ defmodule BroadcastRelay.Router do
 
   defp relay_to_clients(data) do
     IO.puts("🚀 Relaying chunk: #{byte_size(data)} bytes")
+    Phoenix.PubSub.broadcast(BroadcastRelay.PubSub, "video_stream", {:video_chunk, data})
   end
 
   match _ do

@@ -4,8 +4,20 @@ defmodule BroadcastRelay.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Start the Cowboy server on Port 4000
-      {Plug.Cowboy, scheme: :http, plug: BroadcastRelay.Router, options: [port: 4000]}
+      {Phoenix.PubSub, name: BroadcastRelay.PubSub},
+      {Plug.Cowboy,
+       scheme: :http,
+       plug: BroadcastRelay.Router,
+       options: [
+         port: 4000,
+         dispatch: [
+           {:_,
+            [
+              {"/socket", BroadcastRelay.SocketHandler, []},
+              {:_, Plug.Cowboy.Handler, {BroadcastRelay.Router, []}}
+            ]}
+         ]
+       ]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

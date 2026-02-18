@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>BroadcastFS Tuner</title>
+</head>
+
+<body>
+  <h1>Infinite Drive: Live Stream</h1>
+  <div id="status">Connecting...</div>
+  <div id="log"></div>
+
+  <script>
+    const socket = new WebSocket('ws://localhost:4000/socket');
+    const log = document.getElementById('log');
+
+    socket.onopen = () => {
+      document.getElementById('status').innerText = "Connected! Waiting for bits...";
+    };
+
+    socket.onmessage = (event) => {
+      // event.data is the raw binary chunk from Rust/Elixir
+      const size = event.data.size;
+      const item = document.createElement('p');
+      item.innerText = `📥 Received: ${size} bytes of file data`;
+      log.prepend(item);
+    };
+  </script>
+</body>
+
+</html>
