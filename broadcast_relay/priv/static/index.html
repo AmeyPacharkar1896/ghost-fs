@@ -6,25 +6,121 @@
 </head>
 
 <body>
-  <h1>Infinite Drive: Live Stream</h1>
+  <h1>BroadcastFS: Live Stream Receiver</h1>
   <div id="status">Connecting...</div>
   <div id="log"></div>
 
   <script>
-    const socket = new WebSocket('ws://localhost:4000/socket');
-    const log = document.getElementById('log');
+    const socket = new WebSocket('ws://127.0.0.1:4000/socket');
+    socket.binaryType = 'arraybuffer';
+
+    let receivedBuffer = new Uint8Array(0);
+    let metadata = null;
+
+    // --- BROADCAST DECODER STATE ---
+    let currentByte = 0;
+    let bitCount = 0;
 
     socket.onopen = () => {
-      document.getElementById('status').innerText = "Connected! Waiting for bits...";
+      console.log("⚡ WebSocket Connected!");
+      document.getElementById('status').innerText = "Connected! Waiting for transmission...";
+      document.getElementById('status').style.color = "green";
     };
 
-    socket.onmessage = (event) => {
-      // event.data is the raw binary chunk from Rust/Elixir
-      const size = event.data.size;
-      const item = document.createElement('p');
-      item.innerText = `📥 Received: ${size} bytes of file data`;
-      log.prepend(item);
+    socket.onclose = () => {
+      console.log("❌ WebSocket Disconnected");
+      document.getElementById('status').innerText = "Disconnected";
+      document.getElementById('status').style.color = "red";
     };
+
+    // Translates high-contrast video pixels back into binary data
+    function decodePixelsToBytes(pixelChunk) {
+      let extractedBytes = [];
+
+      // Step by 3 (RGB channels per pixel)
+      for (let i = 0; i < pixelChunk.length; i += 3) {
+        // Threshold detection: Brightness > 127 is a 1, else 0
+        const bit = pixelChunk[i] > 127 ? 1 : 0;
+
+        // Shift the bit into our byte (Big-Endian MSB-first)
+        currentByte = (currentByte << 1) | bit;
+        bitCount++;
+
+        // Once we collect 8 bits, push the complete byte
+        if (bitCount === 8) {
+          extractedBytes.push(currentByte);
+          currentByte = 0;
+          bitCount = 0;
+        }
+      }
+      return new Uint8Array(extractedBytes);
+    }
+
+    socket.onmessage = (event) => {
+      try {
+        const rawPixels = new Uint8Array(event.data);
+
+        // 1. Demodulate the video stream into raw bytes
+        const decodedChunk = decodePixelsToBytes(rawPixels);
+
+        // 2. Append to our receiving buffer
+        const newBuffer = new Uint8Array(receivedBuffer.length + decodedChunk.length);
+        newBuffer.set(receivedBuffer);
+        newBuffer.set(decodedChunk, receivedBuffer.length);
+        receivedBuffer = newBuffer;
+
+        // 3. Parse Metadata Header
+        if (!metadata && receivedBuffer.length >= 12) {
+          const view = new DataView(receivedBuffer.buffer);
+          const nameLen = view.getUint32(0); // Big Endian
+
+          // Sanity check to prevent memory overflow from noise
+          if (nameLen > 0 && nameLen < 1000 && receivedBuffer.length >= 12 + nameLen) {
+            const nameBytes = receivedBuffer.slice(4, 4 + nameLen);
+            const fileName = new TextDecoder().decode(nameBytes);
+            const fileSize = Number(view.getBigUint64(4 + nameLen));
+
+            metadata = { fileName, fileSize, headerSize: 12 + nameLen };
+            console.log(`📂 Incoming File Detected: ${fileName} (${fileSize} bytes)`);
+            document.getElementById('status').innerText = `Receiving: ${fileName}...`;
+          }
+        }
+
+        // 4. File Assembly Check
+        if (metadata) {
+          const currentDataSize = receivedBuffer.length - metadata.headerSize;
+          if (currentDataSize >= metadata.fileSize) {
+            console.log("✅ Transmission Complete!");
+            socket.close();
+            downloadFile();
+          }
+        }
+      } catch (err) {
+        console.error("Demodulation Error:", err);
+      }
+    };
+
+    function downloadFile() {
+      // Slice out exactly the payload data
+      const fileData = receivedBuffer.slice(metadata.headerSize, metadata.headerSize + metadata.fileSize);
+
+      // Debugging peek
+      const previewText = new TextDecoder().decode(fileData.slice(0, 50));
+      console.log("👀 File Content Preview:", previewText);
+
+      // Trigger Download
+      const blob = new Blob([fileData], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = metadata.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      document.getElementById('status').innerText = `Success! ${metadata.fileName} received.`;
+    }
   </script>
 </body>
 
