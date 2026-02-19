@@ -38,15 +38,9 @@ fn main() {
             "-i",
             "-",
             "-c:v",
-            "libx264rgb",
-            "-crf",
-            "0",
-            "-preset",
-            "ultrafast",
-            "-tune",
-            "zerolatency",
+            "rawvideo",
             "-f",
-            "mpegts",
+            "rawvideo",
             "-method",
             "POST",
             "http://127.0.0.1:4000/stream",
@@ -83,6 +77,8 @@ fn main() {
             break;
         }
     }
+
+    drop(stdin);
 
     let status = child.wait().expect("FFmpeg failed to finish");
     println!("FFmpeg exited with status: {:?}", status);
