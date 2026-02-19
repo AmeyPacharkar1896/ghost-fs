@@ -1,0 +1,110 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #050505;
+  color: #0f0;
+  font-family: 'Courier New', Courier, monospace;
+  margin: 0;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.terminal {
+  width: 100%;
+  max-width: 900px;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.7);
+}
+
+h1 {
+  font-size: 1.5rem;
+  letter-spacing: 2px;
+  border-bottom: 1px solid #0f0;
+  padding-bottom: 10px;
+}
+
+.blink {
+  animation: blinker 1s linear infinite;
+}
+
+@keyframes blinker {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* The Decoy Video Screen */
+.visualizer-container {
+  position: relative;
+  border: 1px solid #0f0;
+  margin: 20px 0;
+  background: #000;
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.2);
+}
+
+canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: grayscale(100%) sepia(100%) hue-rotate(70deg) contrast(1.5);
+  /* Makes the video look like green night-vision */
+}
+
+/* CRT Scanline effect over the video */
+.scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 4px, 3px 100%;
+  pointer-events: none;
+}
+
+/* The Burn After Reading UI */
+.hidden {
+  display: none !important;
+}
+
+#extraction-zone {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px dashed #f00;
+  color: #f00;
+  text-shadow: 0 0 5px rgba(255, 0, 0, 0.7);
+}
+
+.danger {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 15px;
+}
+
+button {
+  background: #f00;
+  color: #000;
+  border: none;
+  padding: 10px 20px;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #fff;
+  box-shadow: 0 0 10px #fff;
+}
+
+#log-console {
+  margin-top: 20px;
+  font-size: 0.8rem;
+  color: #55f;
+}
+
+.log-entry {
+  margin: 2px 0;
+}
