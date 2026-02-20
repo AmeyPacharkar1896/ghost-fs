@@ -2,13 +2,16 @@ defmodule BroadcastRelay.SocketHandler do
   @behaviour :cowboy_websocket
 
   def init(request, _state) do
-    IO.puts("🔌 Frontend connected to Socket!")
-    {:cowboy_websocket, request, %{}}
+    query = URI.decode_query(request.qs)
+    freq = Map.get(query, "freq", "unknown")
+
+    IO.puts("🔌 Agent tuning hardware to Frequency: #{freq}")
+    {:cowboy_websocket, request, %{freq: freq}}
   end
 
   def websocket_init(state) do
-    Phoenix.PubSub.subscribe(BroadcastRelay.PubSub, "video_stream")
-    IO.puts("✅ Subscribed to 'video_stream' topic.")
+    Phoenix.PubSub.subscribe(BroadcastRelay.PubSub, "video_stream:#{state.freq}")
+    IO.puts("✅ Hardware locked to 'video_stream:#{state.freq}'")
     {:ok, state}
   end
 
