@@ -1,44 +1,42 @@
-use aes_gcm::{
-    Aes256Gcm, Key, Nonce,
-    aead::{Aead, KeyInit},
-};
+mod crypto;
+mod video;
+
 use rand::RngExt;
 use std::fs::File;
 use std::io::{self, BufRead, Read, Write};
-use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
+
+// Helper to generate the frequency string
+fn generate_freq() -> String {
+    let mut rng = rand::rng();
+    format!(
+        "{:03}.{:02}",
+        rng.random_range(100..=999),
+        rng.random_range(0..=99)
+    )
+}
 
 fn main() {
     let width = 1280;
     let height = 720;
     let decoy_video = "decoy.mp4";
+    let fps = 25; // Matching FFmpeg framerate
 
     println!("> GHOST_FS STATION BOOTING...");
 
-    // 1. Generate Frequency
-    let mut rng = rand::rng();
-    let frequency = format!(
-        "{:03}.{:02}",
-        rng.random_range(100..=999),
-        rng.random_range(0..=99)
-    );
-    let target_url = format!("http://127.0.0.1:4000/stream/{}", frequency);
-
+    // 1. Initial Frequency Setup
+    let mut current_freq = generate_freq();
     println!("========================================");
-    println!("> 📡 BROADCASTING CONTINUOUS DECOY ON FREQ: {}", frequency);
+    println!("> 📡 BROADCASTING DECOY ON FREQ: {}", current_freq);
     println!("========================================");
 
-    // 2. Setup the Inter-Thread Communication Channel
-    // This allows the Console to send encrypted payloads to the Video Stream
+    // 2. Inter-Thread Comms
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
 
-    // 3. Spawning the Command Console Thread
+    // 3. Command Console Thread
     thread::spawn(move || {
         let stdin = io::stdin();
-        println!("> COMMAND CONSOLE READY.");
-        println!("> Type a filename (e.g., test.txt) and press ENTER to inject payload.");
-
         for line in stdin.lock().lines() {
             let filename = line.unwrap();
             let filename = filename.trim();
@@ -46,37 +44,10 @@ fn main() {
                 continue;
             }
 
-            println!("> READING PAYLOAD: {}", filename);
             if let Ok(mut input_file) = File::open(filename) {
                 let mut file_content = Vec::new();
                 input_file.read_to_end(&mut file_content).unwrap();
-
-                // Build & Encrypt
-                let mut raw_payload = Vec::new();
-                let name_bytes = filename.as_bytes();
-                raw_payload.extend_from_slice(&(name_bytes.len() as u32).to_be_bytes());
-                raw_payload.extend_from_slice(name_bytes);
-                raw_payload.extend_from_slice(&(file_content.len() as u64).to_be_bytes());
-                raw_payload.extend(file_content);
-
-                let key = Key::<Aes256Gcm>::from_slice(b"GHOST_PROTOCOL_SECRET_KEY_32BYTE");
-                let cipher = Aes256Gcm::new(key);
-                let nonce = Nonce::from_slice(b"unique_nonce");
-                let encrypted_payload = cipher
-                    .encrypt(nonce, raw_payload.as_ref())
-                    .expect("Encryption failure!");
-
-                let mut final_payload = Vec::new();
-                final_payload.extend_from_slice(b"GHOST");
-                final_payload.extend_from_slice(&(encrypted_payload.len() as u32).to_be_bytes());
-                final_payload.extend(encrypted_payload);
-
-                println!(
-                    "> PAYLOAD SECURED ({} bytes). SENDING TO BROADCAST TOWER...",
-                    final_payload.len()
-                );
-
-                // Send to the video loop
+                let final_payload = crypto::prepare_payload(filename, &file_content);
                 tx.send(final_payload).unwrap();
             } else {
                 println!("> ERROR: FILE '{}' NOT FOUND.", filename);
@@ -84,86 +55,71 @@ fn main() {
         }
     });
 
-    // 4. Start Broadcast Hardware (FFmpeg)
-    let mut decoder = Command::new("ffmpeg")
-        .args([
-            "-re",
-            "-stream_loop",
-            "-1",
-            "-i",
-            decoy_video,
-            "-vf",
-            &format!("scale={}:{}", width, height),
-            "-f",
-            "rawvideo",
-            "-pixel_format",
-            "rgb24",
-            "-",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("Failed to start decoy decoder.");
+    // 4. Start Hardware
+    let mut decoder_out = video::spawn_decoder(decoy_video, width, height);
 
-    let mut decoder_out = decoder
-        .stdout
-        .take()
-        .expect("Failed to open decoder output");
+    // Unpack the tuple to keep track of the process AND the input stream
+    let mut target_url = format!("http://127.0.0.1:4000/stream/{}", current_freq);
+    let (mut encoder_proc, mut encoder_in) = video::spawn_encoder(&target_url, width, height);
 
-    let mut encoder = Command::new("ffmpeg")
-        .args([
-            "-f",
-            "rawvideo",
-            "-pixel_format",
-            "rgb24",
-            "-video_size",
-            &format!("{}x{}", width, height),
-            "-framerate",
-            "25",
-            "-i",
-            "-",
-            "-c:v",
-            "rawvideo",
-            "-f",
-            "rawvideo",
-            "-method",
-            "POST",
-            &target_url,
-        ])
-        .stdin(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("Failed to start encoder");
-
-    let mut encoder_in = encoder.stdin.take().expect("Failed to open encoder input");
-
-    // 5. The Live Broadcast Loop
-    let frame_size = width * height * 3;
+    // 5. State Machine Variables
+    let frame_size = (width * height * 3) as usize;
     let mut frame_buffer = vec![0u8; frame_size];
 
-    // State variables for active transmission
     let mut active_payload: Option<Vec<u8>> = None;
     let mut byte_cursor = 0;
     let mut bit_cursor = 0;
 
+    // 15 seconds * 25 FPS = 375 frames
+    let mut cooldown_frames = 0;
+
     loop {
-        // A. Get a clean frame
+        // Read clean frame
         if decoder_out.read_exact(&mut frame_buffer).is_err() {
             break;
         }
 
-        // B. Check if Console sent a new payload to inject
-        if active_payload.is_none() {
+        // --- HOPPING LOGIC ---
+        if cooldown_frames > 0 {
+            cooldown_frames -= 1;
+
+            if cooldown_frames == 0 {
+                println!(
+                    ">> BURN TIMER EXPIRED. SCORCHING EARTH ON FREQ {} <<",
+                    current_freq
+                );
+
+                // 1. Terminate current stream
+                drop(encoder_in);
+                let _ = encoder_proc.kill();
+                let _ = encoder_proc.wait();
+
+                // 2. Generate new frequency
+                current_freq = generate_freq();
+                target_url = format!("http://127.0.0.1:4000/stream/{}", current_freq);
+
+                println!("> 📡 NEW BURNER FREQUENCY ESTABLISHED: {}", current_freq);
+
+                // 3. Spin up new encoder
+                let (new_proc, new_in) = video::spawn_encoder(&target_url, width, height);
+                encoder_proc = new_proc;
+                encoder_in = new_in;
+            }
+        }
+
+        // --- INJECTION LOGIC ---
+        if active_payload.is_none() && cooldown_frames == 0 {
             if let Ok(new_payload) = rx.try_recv() {
-                println!(">> INJECTING PAYLOAD INTO LIVE FEED <<");
+                println!(">> INJECTING PAYLOAD ON {} <<", current_freq);
                 active_payload = Some(new_payload);
                 byte_cursor = 0;
                 bit_cursor = 0;
             }
         }
 
-        // C. Inject Data IF we have an active payload
         if let Some(ref payload) = active_payload {
+            let mut finished_injecting = false;
+
             for i in 0..frame_size {
                 if byte_cursor < payload.len() {
                     let bit = (payload[byte_cursor] >> (7 - bit_cursor)) & 1;
@@ -175,17 +131,25 @@ fn main() {
                         byte_cursor += 1;
                     }
                 } else {
-                    println!(">> TRANSMISSION COMPLETE. BACK TO CLEAN FEED. <<");
-                    active_payload = None; // Erase payload from active memory
+                    finished_injecting = true;
                     break;
                 }
             }
+
+            if finished_injecting {
+                println!(">> TRANSMISSION COMPLETE. INITIATING 15s COUNTDOWN... <<");
+                active_payload = None;
+                cooldown_frames = fps * 15; // Start the 15-second death timer
+            }
         }
 
-        // D. Send frame out to Elixir
+        // Send out to Elixir
         if encoder_in.write_all(&frame_buffer).is_err() {
-            println!("> ELIXIR CONNECTION LOST. Shutting down.");
-            break;
+            // Only break if it fails when we aren't intentionally hopping
+            if cooldown_frames != 0 {
+                println!("> ELIXIR CONNECTION LOST UNEXPECTEDLY.");
+                break;
+            }
         }
     }
 }

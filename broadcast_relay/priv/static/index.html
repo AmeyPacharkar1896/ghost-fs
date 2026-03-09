@@ -17,6 +17,7 @@
           <button id="tune-btn">[ LOCK SIGNAL ]</button>
     </div>
   </div>
+
   <div class="terminal">
     <div class="header">
       <h1>GHOST_FS :: TACTICAL RELAY</h1>
@@ -26,6 +27,14 @@
     <div class="visualizer-container">
       <canvas id="feed" width="1280" height="720"></canvas>
       <div class="scanlines"></div>
+
+      <div id="dead-signal-overlay" class="hidden">
+        <div class="tuner-box error-box">
+          <h2 class="danger blink">>> FREQUENCY BURNED <<< /h2>
+              <p>HOST HAS SCORCHED THIS CHANNEL.</p>
+              <button id="retune-btn">[ INITIATE RETUNE ]</button>
+        </div>
+      </div>
     </div>
 
     <div id="extraction-zone" class="hidden">
@@ -37,7 +46,7 @@
     <div id="log-console"></div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="main.js"></script>
 </body>
 
 </html>
