@@ -247,7 +247,8 @@ canvas {
 }
 
 .progress-bar-container {
-    width: 300px;
+    width: 100%;
+    max-width: 300px;
     height: 4px;
     background: rgba(255,255,255,0.2);
     margin-top: 5px;
@@ -328,4 +329,50 @@ canvas {
 }
 @keyframes toastFadeOut {
     to { opacity: 0; transform: translateY(-10px); }
+}
+
+/* Responsive / Mobile View */
+@media (max-width: 768px) {
+    #app-container {
+        padding: 1rem;
+        gap: 1.5rem;
+    }
+    
+    .role-selector {
+        flex-direction: column;
+    }
+    
+    .glass-card {
+        padding: 1.5rem;
+    }
+    
+    .logo-text {
+        font-size: 1.1rem;
+    }
+    
+    .status-indicator {
+        font-size: 0.75rem;
+    }
+    
+    .invite-box {
+        flex-direction: column;
+    }
+    
+    .invite-box .btn-action {
+        width: 100%;
+        text-align: center;
+        justify-content: center;
+    }
+    
+    .file-details {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+    
+    .monitor-header {
+        flex-direction: column;
+        gap: 0.25rem;
+        align-items: flex-start;
+    }
 }
