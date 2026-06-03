@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GhostFS :: Secure Ephemeral Transfer</title>
+    <meta name="description" content="Military-grade steganographic file transfer via live video streams.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="stylesheet" href="app.css?v=3">
+</head>
+<body class="dark-mode">
+    <div id="app-container">
+        
+        <!-- HEADER -->
+        <header class="top-nav">
+            <div class="logo-container" onclick="app.showLanding()" style="cursor: pointer;">
+                <i class="ph ph-ghost logo-icon" style="color: var(--accent-color);"></i>
+                <h1 class="logo-text">GHOST_FS</h1>
+            </div>
+            <div class="status-indicator">
+                <div class="pulse-dot"></div>
+                <span id="global-status">SYSTEM_READY</span>
+            </div>
+        </header>
+
+        <!-- ROUTER VIEWS -->
+        <main id="view-container">
+            
+            <!-- LANDING VIEW -->
+            <section id="view-landing" class="view active">
+                <div class="glass-card main-prompt">
+                    <h2>INITIATE PROTOCOL</h2>
+                    <p class="subtitle">Select your operational role for this transmission.</p>
+                    
+                    <div class="role-selector">
+                        <button class="btn-primary role-btn" onclick="app.setRole('sender')">
+                            <i class="ph ph-upload-simple btn-icon"></i>
+                            <div class="btn-text">
+                                <strong>TRANSMIT</strong>
+                                <span>I have a payload to send.</span>
+                            </div>
+                        </button>
+                        
+                        <button class="btn-secondary role-btn" onclick="app.setRole('receiver')">
+                            <i class="ph ph-download-simple btn-icon"></i>
+                            <div class="btn-text">
+                                <strong>INTERCEPT</strong>
+                                <span>I need to receive a payload.</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SENDER VIEW -->
+            <section id="view-sender" class="view hidden">
+                <div class="glass-card">
+                    <button class="back-btn" onclick="app.showLanding()">← Abort</button>
+                    <h2>TRANSMIT PAYLOAD</h2>
+                    
+                    <div class="upload-zone" id="drop-zone">
+                        <input type="file" id="file-input" class="hidden-input">
+                        <label for="file-input" class="upload-label">
+                            <i class="ph ph-file-dashed upload-icon"></i>
+                            <span>Click to select a secure payload</span>
+                            <span class="file-limits">Any file type. Max 50MB recommended.</span>
+                        </label>
+                    </div>
+                    
+                    <div id="sender-active-state" class="hidden">
+                        <div class="file-details">
+                            <span class="file-name" id="sender-filename">filename.txt</span>
+                            <span class="file-size" id="sender-filesize">0 KB</span>
+                        </div>
+                        
+                        <div class="invite-section">
+                            <p class="invite-label">SHARE THIS SECURE LINK WITH THE RECEIVER:</p>
+                            <div class="invite-box">
+                                <input type="text" id="invite-link" readonly>
+                                <button class="btn-action" onclick="sender.copyLink()">Copy</button>
+                            </div>
+                            <p class="security-note">⚠️ The decryption key is embedded in the link hash. Only share over secure channels.</p>
+                        </div>
+                        
+                        <div class="broadcast-monitor">
+                            <div class="monitor-header">
+                                <span>BROADCAST MONITOR</span>
+                                <span class="freq-display" id="sender-freq">--.--</span>
+                            </div>
+                            <div class="video-container">
+                                <video id="decoy-video" src="decoy.mp4" loop muted playsinline style="display: none;"></video>
+                                <canvas id="sender-canvas" width="1280" height="720"></canvas>
+                                <div class="overlay-stats">
+                                    <span id="sender-stats">AWAITING RECEIVER...</span>
+                                </div>
+                            </div>
+                            <button class="btn-danger w-100 mt-4" id="btn-start-broadcast" onclick="sender.startBroadcast()">INITIATE BROADCAST</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- RECEIVER VIEW -->
+            <section id="view-receiver" class="view hidden">
+                <div class="glass-card">
+                    <button class="back-btn" onclick="app.showLanding()">← Abort</button>
+                    <h2>INTERCEPT PAYLOAD</h2>
+                    
+                    <div id="receiver-setup">
+                        <p class="subtitle">Enter the transmission parameters provided by the Sender.</p>
+                        <div class="input-group">
+                            <label>Channel Frequency</label>
+                            <input type="text" id="rx-channel" placeholder="e.g. 464.36" class="tech-input">
+                        </div>
+                        <div class="input-group">
+                            <label>Decryption Key</label>
+                            <input type="password" id="rx-key" placeholder="Paste 64-char hex key" class="tech-input">
+                        </div>
+                        <button class="btn-primary w-100" onclick="receiver.connect()">LOCK SIGNAL</button>
+                    </div>
+
+                    <div id="receiver-active-state" class="hidden">
+                        <div class="broadcast-monitor scanline-effect">
+                            <div class="monitor-header">
+                                <span>INTERCEPT MONITOR</span>
+                                <span class="freq-display" id="rx-freq-display">--.--</span>
+                            </div>
+                            <div class="video-container">
+                                <canvas id="receiver-canvas" width="1280" height="720"></canvas>
+                                <div class="overlay-stats">
+                                    <span id="rx-stats">LISTENING FOR MAGIC SIGNATURE...</span>
+                                    <div class="progress-bar-container hidden" id="rx-progress-container">
+                                        <div class="progress-bar" id="rx-progress"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="burnout-container" class="hidden">
+                            <div class="burnout-alert">
+                                <h3>PAYLOAD EXTRACTED</h3>
+                                <p>Memory wipe in: <span id="burnout-timer" class="timer-text">10.0</span>s</p>
+                            </div>
+                            <button class="btn-success w-100 pulse" id="btn-download" onclick="receiver.downloadPayload()">SAVE PAYLOAD TO DISK</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="app.js?v=5"></script>
+    <script src="crypto_utils.js?v=5"></script>
+    <script src="sender.js?v=5"></script>
+    <script src="receiver.js?v=5"></script>
+</body>
+</html>
