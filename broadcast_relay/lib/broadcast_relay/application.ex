@@ -3,13 +3,15 @@ defmodule BroadcastRelay.Application do
 
   @impl true
   def start(_type, _args) do
+    port = String.to_integer(System.get_env("PORT") || "4000")
+    
     children = [
       {Phoenix.PubSub, name: BroadcastRelay.PubSub},
       {Plug.Cowboy,
        scheme: :http,
        plug: BroadcastRelay.Router,
        options: [
-         port: 4000,
+         port: port,
          dispatch: [
            {:_,
             [
