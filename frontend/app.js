@@ -8,7 +8,7 @@ const app = {
     },
 
     // CHANGE THIS WHEN YOU DEPLOY YOUR BACKEND TO PRODUCTION (e.g. "ghostfs-relay.fly.dev")
-    PRODUCTION_BACKEND: "localhost:4000",
+    PRODUCTION_BACKEND: "ghostfs-relay.onrender.com",
 
     getWsUrl(channel, role) {
         const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
